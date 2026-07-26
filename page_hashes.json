@@ -1,5 +1,6 @@
 {
  "https://ameriflight.com/careers/": "0d17de5909566131",
+<<<<<<< Updated upstream
  "https://careers.alaskaair.com/company/horizon-air/job-category/pilots/jobs/": "0a27803a9a4d031a",
  "https://flyaroundalaska.com/flight-school/hiring-flight-instructor/": "500df7103f6251ba",
  "https://www.birchcreekaviation.com/": "e78b249bca40b5ff",
@@ -11,4 +12,17 @@
  "https://www.kenmoreair.com/careers/": "d8531a1ac331414d",
  "https://www.lowtimepilot.com/": "5d461346b83d730c",
  "https://www.roadto1500.com/p/community-database": "452c3d292bb2828c"
+=======
+ "https://careers.alaskaair.com/company/horizon-air/job-category/pilots/jobs/": "ca1fb2838a61b9bd",
+ "https://flyaroundalaska.com/flight-school/hiring-flight-instructor/": "55de88ba9a8358ec",
+ "https://www.birchcreekaviation.com/": "e78b249bca40b5ff",
+ "https://www.flyalaskaseaplanes.com/": "896c4074b5523c62",
+ "https://www.flygrant.com/careers": "ef84a81090ecdc0c",
+ "https://www.flyravn.com/careers/": "e31a3fb689e289a8",
+ "https://www.glassdoor.com/Jobs/Southern-Airways-Express-Jobs-E1907708.htm": "be789ef879e6a42f",
+ "https://www.kamakaair.com/careers": "d727cfea5b588a9e",
+ "https://www.kenmoreair.com/careers/": "d8531a1ac331414d",
+ "https://www.lowtimepilot.com/": "5d461346b83d730c",
+ "https://www.roadto1500.com/p/community-database": "d0ad26aa3a1e8feb"
+>>>>>>> Stashed changes
 }
