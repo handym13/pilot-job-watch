@@ -272,19 +272,26 @@ def _rows_from_text(html, name, page_url):
 
     # Must read like employment, not enrollment. "Apply now" alone is what every
     # flight academy puts on its admissions page, so it is deliberately not here.
-    hiring = re.search(
-        r"(now hiring|we are hiring|we're hiring|join our team|join the team|"
-        r"accepting (?:pilot )?(?:resumes|applications)|send (?:your )?resume|"
-        r"open position|job opening|employment opportunit|career opportunit|"
-        r"apply (?:for|to) (?:this|the|our) (?:position|role|opening|job)|"
-        r"(?:full|part)[- ]time position|salary|hourly rate|per (?:flight |block )?hour|"
-        r"compensation|benefits package|\bW-?2\b|1099|pay range)", text, re.I)
-    out, seen_titles = [], set()
+    # Explicit hiring language only. Pay words like "hourly rate" and "per hour"
+    # are deliberately absent: every school's aircraft rental page has them.
+    HIRE = (r"now hiring|we are hiring|we're hiring|currently hiring|"
+            r"join our team|join the team|now accepting applications|"
+            r"accepting (?:pilot )?(?:resumes|applications)|send (?:your )?resume|"
+            r"email (?:your )?resume|open position|position available|job opening|"
+            r"employment opportunit|career opportunit|we have an opening|"
+            r"apply (?:for|to) (?:this|the|our) (?:position|role|opening|job)|"
+            r"(?:full|part)[- ]time (?:position|employment)")
+    hiring = re.search(HIRE, text, re.I)
+    out, seen_titles, claimed = [], set(), []
     for pat in WANTED_TITLES:
         for m in re.finditer(pat, text, re.I):
             # keep a readable window around the hit for context and location
-            lo, hi = max(0, m.start() - 220), min(len(text), m.end() + 220)
+            lo, hi = max(0, m.start() - 400), min(len(text), m.end() + 400)
             snippet = text[lo:hi].strip()
+            # The hiring phrase has to be near this title, not merely somewhere
+            # on the page, or a footer careers link turns marketing into a job.
+            if not re.search(HIRE, snippet, re.I):
+                continue
             title = m.group(0).strip()
             key = title.lower()
             if key in seen_titles:
@@ -295,12 +302,18 @@ def _rows_from_text(html, name, page_url):
                            r"(AK|HI|CA|OR|WA|NV|AZ|ID)\b", snippet)
             if lm:
                 loc = lm.group(0)
+            # Collapse overlapping matches: "hiring flight instructors, CFI/CFII
+            # required" is one job, not three. Keep the first hit per region.
+            if any(abs(m.start() - s) < 300 for s in claimed):
+                continue
+            claimed.append(m.start())
             out.append({"source": name, "title": title.title(), "url": page_url,
                         "location": loc, "context": snippet,
-                        "text_only": True, "hiring_signal": bool(hiring)})
+                        "page_text": text[:20000],
+                        "text_only": True, "hiring_signal": True})
     # Without a hiring phrase anywhere on the page, a bare mention of "pilot" is
     # almost certainly navigation or marketing copy, not an opening.
-    return [r for r in out if r["hiring_signal"]][:4]
+    return [r for r in out if r["hiring_signal"]][:3]
 
 
 def scrape(name, url, base=""):
@@ -457,8 +470,9 @@ def verify_live(job):
     if not url:
         return "no link", ""
     if job.get("text_only"):
-        # Already have the page text; a careers page has no "filled" state to check.
-        return "live", job.get("context", "")
+        # Hand back the whole page, not just the snippet, so the training-program
+        # filter can see language that sits elsewhere on the page.
+        return "live", job.get("page_text") or job.get("context", "")
     try:
         r = requests.get(url, headers=UA, timeout=TIMEOUT)
     except Exception as e:
@@ -570,6 +584,12 @@ def assess(text, job):
     for reason, words in EXCLUDE.items():
         if any(w in low for w in words):
             return d, reason
+
+    title_l = job.get("title", "").lower()
+    if re.search(r"\b(program|academy|course|curriculum|pathway|cadet|"
+                 r"training|school|admissions|scholarship|internship|"
+                 r"apprentice|bootcamp|camp)\b", title_l):
+        return d, "training product, not a job (title)"
 
     hits = [w for w in TRAINING_PROGRAM if w in low]
     if hits:
