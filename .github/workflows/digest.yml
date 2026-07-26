@@ -5,8 +5,8 @@ on:
     # Fast poll: hot sources only, roughly every 20 minutes.
     # GitHub queues scheduled runs, so treat this as "about every 20 to 45 min".
     - cron: "*/20 * * * *"
-    # Full sweep plus the research pass, once daily at 07:00 Hawaii time.
-    - cron: "0 17 * * *"
+    # Full sweep plus the research pass, once daily at 07:00 Pacific time.
+    - cron: "0 14 * * *"
   workflow_dispatch:
     inputs:
       full:
@@ -35,7 +35,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          FULL_SWEEP: ${{ github.event.schedule == '0 17 * * *' && '1' || inputs.full && '1' || '' }}
+          FULL_SWEEP: ${{ github.event.schedule == '0 14 * * *' && '1' || inputs.full && '1' || '' }}
         run: python digest.py
 
       - name: Publish
