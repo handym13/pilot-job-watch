@@ -33,11 +33,12 @@ BAND_NOW = CURRENT_HOURS    # a stated minimum at or under this, he meets it
 BAND_SOON = 1250            # stated, above his time, but reachable this year
 MAX_MINIMUM = 1250          # above this he would already be at Horizon, so drop it
 
-# He already instructs in the Bay Area, so a California CFI job is a sideways move.
-# Instructing only counts as progress if it comes with a relocation he wants.
+# He already holds a CFI job in California. Instructing is only worth a look if it
+# comes with the move he actually wants, which is Hawaii. Everywhere else it is a
+# sideways step, so instructor titles are dropped outside tier 3.
 INSTRUCTOR_TITLES = [r"flight instructor", r"\bCFI\b", r"\bCFII\b", r"\bMEI\b",
-                     r"instructor pilot", r"ground instructor"]
-NO_INSTRUCTING_IN_TIERS = (1, 2)   # Northern California and the rest of California
+                     r"instructor pilot", r"ground instructor", r"\binstructor\b"]
+INSTRUCTING_OK_IN_TIERS = (3,)     # Hawaii only
 
 EXCLUDE = {
     "rotorcraft": ["rotorcraft", "helicopter", "anti-torque", "autorotation",
@@ -49,6 +50,29 @@ EXCLUDE = {
     "outside US": ["united kingdom", "farnborough", "le bourget", "dubai", "singapore",
                    ", gb,", ", fr,", ", ae,", ", sg,", ", au,", ", nz,", ", de,"],
 }
+
+# A school selling training and an operator hiring a pilot use much of the same
+# vocabulary. These phrases only appear on the selling side. Any hit drops the row.
+TRAINING_PROGRAM = [
+    # Commercial and financial language. A school selling seats says these; an
+    # operator hiring a pilot never does.
+    "tuition", "enroll", "enrollment", "admissions", "financing available",
+    "financing options", "loan options", "program cost", "course fee",
+    "training package", "zero to hero", "zero-to-hero", "request info",
+    "schedule a tour", "prospective student",
+    # Product names for training sold as a package.
+    "become a pilot", "become a commercial pilot", "become a cfi", "become an airline",
+    "start your aviation career", "start your career in aviation",
+    "cadet program", "pathway program", "professional pilot program",
+    "career pilot program", "career track program",
+    # Deliberately NOT here, because real CFI job descriptions use them:
+    #   "our students"      instruct our students
+    #   "student pilot"     train student pilots
+    #   "discovery flight"  conduct discovery flights
+    #   "flight training program"  our Part 141 flight training program
+    # Dropping a genuine Hawaii or Alaska instructor job costs more than showing
+    # one extra program, so those stay out of this list.
+]
 
 # Pay-to-fly is not hidden, it is routed to its own section and sorted by price.
 # Buying multi time in a light twin is ordinary. Buying jet SIC time is viewed
@@ -65,7 +89,9 @@ WANTED_TITLES = [
     r"second[- ]in[- ]command", r"\bSIC\b", r"support crew member", r"seat support",
     r"simulator support pilot", r"pilot monitoring", r"simulator pilot",
     r"first officer", r"\bF/?O\b", r"co-?pilot", r"relief pilot", r"line pilot",
-    r"\bpilot\b", r"flight instructor", r"\bCFI\b", r"\bMEI\b", r"\bCFII\b",
+    r"pilot (?:position|opening|job|wanted|needed)", r"hiring pilots?",
+    r"(?:^|\W)(?:staff|line|company|contract|seasonal|charter) pilot",
+    r"flight instructor", r"\bCFI\b", r"\bMEI\b", r"\bCFII\b",
     r"charter pilot", r"cargo pilot", r"survey pilot", r"aerial survey",
     r"pipeline patrol", r"power ?line patrol", r"utility patrol", r"patrol pilot",
     r"banner tow", r"aerial advertis", r"skydive", r"skydiving", r"jump pilot",
@@ -244,8 +270,15 @@ def _rows_from_text(html, name, page_url):
         junk.decompose()
     text = re.sub(r"\s+", " ", soup.get_text(" ", strip=True))
 
-    hiring = re.search(r"(now hiring|we are hiring|we're hiring|accepting (?:pilot )?"
-                       r"(?:resumes|applications)|open position|job opening|apply)", text, re.I)
+    # Must read like employment, not enrollment. "Apply now" alone is what every
+    # flight academy puts on its admissions page, so it is deliberately not here.
+    hiring = re.search(
+        r"(now hiring|we are hiring|we're hiring|join our team|join the team|"
+        r"accepting (?:pilot )?(?:resumes|applications)|send (?:your )?resume|"
+        r"open position|job opening|employment opportunit|career opportunit|"
+        r"apply (?:for|to) (?:this|the|our) (?:position|role|opening|job)|"
+        r"(?:full|part)[- ]time position|salary|hourly rate|per (?:flight |block )?hour|"
+        r"compensation|benefits package|\bW-?2\b|1099|pay range)", text, re.I)
     out, seen_titles = [], set()
     for pat in WANTED_TITLES:
         for m in re.finditer(pat, text, re.I):
@@ -538,6 +571,10 @@ def assess(text, job):
         if any(w in low for w in words):
             return d, reason
 
+    hits = [w for w in TRAINING_PROGRAM if w in low]
+    if hits:
+        return d, f"training program, not a job ({hits[0]})"
+
     rot = re.search(
         r"(week on[,\s]+week off|\b\d{1,2}\s*(?:on|/)\s*\d{1,2}\s*(?:off)?\b|"
         r"rotational|rotation schedule|two weeks on|2 weeks on|commutable|crew housing)", low)
@@ -584,9 +621,9 @@ def assess(text, job):
         return d, "outside his geography"
 
     # He already instructs in the Bay Area, so a California CFI job is sideways.
-    if (d["tier"] in NO_INSTRUCTING_IN_TIERS
+    if (d["tier"] not in INSTRUCTING_OK_IN_TIERS
             and any(re.search(p, job.get("title", ""), re.I) for p in INSTRUCTOR_TITLES)):
-        return d, "CFI role in California, already instructing locally"
+        return d, "instructor role outside Hawaii, already instructing"
 
     d["kind"] = "sim" if re.search(r"simulator|second[- ]in[- ]command|support crew|seat support",
                                    job["title"], re.I) else "line"
