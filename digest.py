@@ -331,7 +331,7 @@ def scrape(name, url, base=""):
             rows = _rows_from_text(r.text, name, url)
         return rows
     except Exception as e:
-        return [{"source": name, "error": str(e)}]
+        return [{"source": name, "error": str(e), "url": url}]
 
 
 def fetch_cae():
@@ -1007,7 +1007,7 @@ def poll(sources, hashes):
             found = _rows_from_links(r.text, name, "/".join(url.split("/")[:3]))
             rows += found or _rows_from_text(r.text, name, url)
         except Exception as e:
-            rows.append({"source": name, "error": str(e)})
+            rows.append({"source": name, "error": str(e), "url": url})
     return rows, checked, skipped
 
 
@@ -1075,7 +1075,9 @@ def research_pass(unreachable):
 
     names = companies_for_run()
     name_list = "\n".join(f"- {c}" for c in names)
-    broken = "\n".join(f"- {u}" for u in unreachable[:10]) or "- none this run"
+    broken = "\n".join(
+        f"- {u[0]} ({u[2]})" if isinstance(u, tuple) else f"- {u}"
+        for u in unreachable[:10]) or "- none this run"
 
     prompt = f"""You are the research half of a daily pilot job search. A scraper already
 checked a fixed list of careers page URLs. You do what it cannot: search the open web.
@@ -1216,18 +1218,63 @@ def build_html(jobs, top, payfly, rejected, errors, run_time, held_back=None,
 
     rej = ""
     if rejected:
-        items = "".join(f"<li>{j['source']}: {j.get('title','')} "
-                        f"<span style='color:#8a5a00;'>({w})</span></li>" for j, w in rejected[:25])
-        rej = (f'<p style="font-size:12px;color:#5b6570;margin-top:20px;">Checked and dropped, so an '
-               f'empty table reads as the filter working rather than the scraper breaking:</p>'
-               f'<ul style="font-size:12px;color:#5b6570;line-height:1.6;padding-left:18px;">{items}</ul>')
+        def _drop_row(j, w):
+            label = j.get("title") or "untitled posting"
+            url = j.get("url")
+            link = (f'<a href="{url}" style="color:#1f6feb;text-decoration:none;">{label}</a>'
+                    if url else label)
+            return (f"<li style='margin-bottom:4px;'>{j.get('source','')}: {link} "
+                    f"<span style='color:#8a5a00;'>({w})</span></li>")
+        items = "".join(_drop_row(j, w) for j, w in rejected[:40])
+        # Grouped by reason so the summary line is useful while collapsed.
+        # Labels are written to read correctly at any count, so nothing is
+        # pluralised on the fly. "2 CFI outside Hawaiis" is how that goes wrong.
+        SHORT = [
+            (r"^training (program|product)", "training programs"),
+            (r"^posted ",                    "too old"),
+            (r"^needs \d+ hours",            "hours too high"),
+            (r"^instructor role",            "CFI outside Hawaii"),
+            (r"^outside his geography",      "wrong location"),
+            (r"^rotorcraft",                 "rotorcraft"),
+            (r"^multi-year",                 "commitment contracts"),
+            (r"^filled",                     "already filled"),
+            (r"^(gone|unreachable|no link)", "dead links"),
+        ]
+        by_reason = {}
+        for j, w in rejected:
+            label = next((s for pat, s in SHORT if re.search(pat, w, re.I)),
+                         re.sub(r"\s*\(.*\)$", "", w))
+            by_reason[label] = by_reason.get(label, 0) + 1
+        summary = ", ".join(f"{v} {k}" for k, v in
+                            sorted(by_reason.items(), key=lambda x: -x[1])[:4])
+        rej = (f'<details style="margin-top:20px;border-top:1px solid #eef0f2;padding-top:12px;">'
+               f'<summary style="font-size:12px;color:#5b6570;cursor:pointer;list-style:revert;">'
+               f'<strong>{len(rejected)} checked and dropped</strong>'
+               f'{" &middot; " + summary if summary else ""}</summary>'
+               f'<p style="font-size:12px;color:#8a939c;margin:10px 0 6px;">'
+               f'Listed so an empty table reads as the filter working rather than the '
+               f'scraper breaking.</p>'
+               f'<ul style="font-size:12px;color:#5b6570;line-height:1.6;padding-left:18px;">'
+               f'{items}</ul></details>')
 
     err = ""
     if errors:
-        items = "".join(f"<li>{e}</li>" for e in errors)
-        err = (f'<p style="font-size:12px;color:#8a5a00;margin-top:16px;">Sources that did not respond. '
-               f'Nothing found there is not the same as nothing being there.</p>'
-               f'<ul style="font-size:12px;color:#5b6570;line-height:1.6;padding-left:18px;">{items}</ul>')
+        def _err_row(e):
+            if isinstance(e, tuple):
+                name, msg, url = e
+                return (f"<li style='margin-bottom:4px;'>"
+                        f"<a href='{url}' style='color:#1f6feb;text-decoration:none;'>{name}</a>"
+                        f" <span style='color:#8a939c;'>{msg}</span></li>")
+            return f"<li style='margin-bottom:4px;'>{e}</li>"
+        items = "".join(_err_row(e) for e in errors)
+        err = (f'<details style="margin-top:12px;">'
+               f'<summary style="font-size:12px;color:#8a5a00;cursor:pointer;list-style:revert;">'
+               f'<strong>{len(errors)} sources did not respond</strong></summary>'
+               f'<p style="font-size:12px;color:#8a939c;margin:10px 0 6px;">'
+               f'Nothing found there is not the same as nothing being there. '
+               f'Each line is one URL worth fixing.</p>'
+               f'<ul style="font-size:12px;color:#5b6570;line-height:1.6;padding-left:18px;">'
+               f'{items}</ul></details>')
 
     empty = ('<tr><td colspan="5" style="padding:22px 12px;font-size:14px;color:#5b6570;">'
              'Nothing cleared the filter this run. The watchlist was checked in full.</td></tr>')
@@ -1507,14 +1554,14 @@ def main():
     raw, errors = [], []
     hot_rows, checked, skipped = poll(HOT_SOURCES, hashes)
     for row in hot_rows:
-        (errors.append(f"{row['source']}: {row['error']}") if "error" in row
-         else raw.append(row))
+        (errors.append((row["source"], row["error"][:90], row.get("url", "")))
+         if "error" in row else raw.append(row))
 
     if full:
         for fn in WATCHLIST:
             for row in fn():
                 if "error" in row:
-                    errors.append(f"{row['source']}: {row['error']}")
+                    errors.append((row["source"], row["error"][:90], row.get("url", "")))
                 else:
                     raw.append(row)
     ferry_raw = dedupe([r for r in fetch_ferry() if "error" not in r])
