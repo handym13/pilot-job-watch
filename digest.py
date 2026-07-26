@@ -12,6 +12,7 @@ No secrets required. Run locally with: python digest.py
 
 import json, os, re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import requests
@@ -32,6 +33,11 @@ CURRENT_HOURS = 650
 BAND_NOW = CURRENT_HOURS    # a stated minimum at or under this, he meets it
 BAND_SOON = 1250            # stated, above his time, but reachable this year
 MAX_MINIMUM = 1250          # above this he would already be at Horizon, so drop it
+
+# A URL that still resolves is not the same as a job that is still open. Old
+# social posts and archived listings live forever. Anything with a readable date
+# older than this is dropped outright.
+MAX_POSTING_AGE_DAYS = 90
 
 # He already holds a CFI job in California. Instructing is only worth a look if it
 # comes with the move he actually wants, which is Hawaii. Everywhere else it is a
@@ -522,20 +528,42 @@ def extract_posted(html_or_text):
             except ValueError:
                 continue
 
-    # 4. relative
-    m = re.search(r"posted\s+(\d{1,3})\+?\s*(day|week|month)s?\s+ago", t, re.I)
+    # 4. relative, spelled out
+    m = re.search(r"(?:posted\s+)?(\d{1,3})\+?\s*(day|week|month|year|yr)s?\s+ago", t, re.I)
     if m:
         n, unit = int(m.group(1)), m.group(2).lower()
-        days = n * {"day": 1, "week": 7, "month": 30}[unit]
+        days = n * {"day": 1, "week": 7, "month": 30, "year": 365, "yr": 365}[unit]
         dt = datetime.now(timezone.utc) - timedelta(days=days)
         return dt, _posted_label(dt)
+
+    # 5. compact social stamps: "4y", "3yr", "8mo", "2w", "5d", often "• 4y •"
+    m = re.search(r"(?:^|[\s•·|])(\d{1,3})\s?(y|yr|yrs|mo|mos|w|wk|d)(?:[\s•·|]|$)", t, re.I)
+    if m:
+        n, unit = int(m.group(1)), m.group(2).lower()
+        days = n * {"y": 365, "yr": 365, "yrs": 365, "mo": 30, "mos": 30,
+                    "w": 7, "wk": 7, "d": 1}[unit]
+        dt = datetime.now(timezone.utc) - timedelta(days=days)
+        return dt, _posted_label(dt)
+
+    # 6. bare "May 2022"
+    m = re.search(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+"
+                  r"(19\d{2}|20\d{2})\b", t, re.I)
+    if m:
+        try:
+            dt = datetime.strptime(f"{m.group(1)[:3]} {m.group(2)}", "%b %Y").replace(tzinfo=timezone.utc)
+            return dt, _posted_label(dt)
+        except ValueError:
+            pass
 
     return None, "not stated"
 
 
 def _posted_label(dt):
     days = (datetime.now(timezone.utc) - dt).days
-    stamp = dt.strftime("%b %-d")
+    local = dt.astimezone(ZoneInfo("America/Los_Angeles"))
+    stamp = local.strftime("%b %-d")
+    if local.year != datetime.now(ZoneInfo("America/Los_Angeles")).year:
+        stamp = local.strftime("%b %-d, %Y")
     if days <= 0:
         return f"{stamp} · today"
     if days == 1:
@@ -551,6 +579,10 @@ def assess(text, job):
     """Parse, then decide keep or drop. Returns (details, reject_reason)."""
     low = (text + " " + job.get("location", "")).lower()
     d = {}
+
+    # Raw HTML first: JSON-LD datePosted and <time> tags live in markup that text
+    # extraction throws away, and those are the reliable dates.
+    d["posted_dt"], d["posted"] = extract_posted(job.get("raw") or text)
 
     # Real postings phrase this a dozen ways. Catch the common ones, then take
     # the smallest number found, since that is the entry requirement.
@@ -645,6 +677,16 @@ def assess(text, job):
             and any(re.search(p, job.get("title", ""), re.I) for p in INSTRUCTOR_TITLES)):
         return d, "instructor role outside Hawaii, already instructing"
 
+    # A URL that still resolves is not a job that is still open. Old social posts
+    # and archived listings stay reachable forever, so age is checked explicitly.
+    pdt = d.get("posted_dt")
+    if pdt is not None:
+        age = (datetime.now(timezone.utc) - pdt).days
+        if age > MAX_POSTING_AGE_DAYS:
+            return d, f"posted {d.get('posted', 'long ago')}, {age} days old"
+    d["fresh"], d["fresh_rank"] = freshness_band(pdt)
+    d["reach"] = bool(d["min_hours"] and d["min_hours"] > BAND_NOW)
+
     d["kind"] = "sim" if re.search(r"simulator|second[- ]in[- ]command|support crew|seat support",
                                    job["title"], re.I) else "line"
     return d, None
@@ -688,7 +730,7 @@ TIPS = [
 
 def tip_for_run():
     """One tip per calendar day."""
-    now = datetime.now(timezone.utc).astimezone()
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
     return TIPS[now.timetuple().tm_yday % len(TIPS)]
 
 
@@ -743,7 +785,7 @@ HISTORY = [
 
 
 def history_for_run():
-    now = datetime.now(timezone.utc).astimezone()
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
     return HISTORY[now.timetuple().tm_yday % len(HISTORY)]
 
 
@@ -1361,10 +1403,12 @@ def build_html(jobs, top, payfly, rejected, errors, run_time, held_back=None,
    <div style="font-size:13px;margin-top:6px;color:{'#8fd6a8' if changed_n else 'rgba(255,255,255,.55)'};">
     {changed_line}</div>
    <div style="font-size:12px;opacity:.7;margin-top:5px;line-height:1.5;">
-    Confirmed still open at {run_time}. US only, fixed wing, no commitment programs,
-    All US openings. Dropped only for rotorcraft, non-US, commitment programs, or pay-to-fly.
-    Sorted by whether he qualifies now, then rotational schedules, then Northern California,
-    then Alaska and Hawaii. Paid time building is listed separately below.</div>
+    Confirmed still open at {run_time}.
+    California, Hawaii, Alaska and the West. Fixed wing. Nothing above {MAX_MINIMUM} hours.
+    Instructor roles count only in Hawaii. Training programs, commitment contracts and
+    filled postings are dropped and listed at the bottom with the reason.
+    Ranked by fit: a stated minimum he meets, then credentials, schedule, housing,
+    geography and how fresh the posting is. Hawaii is never cut for space.</div>
   </div>
 
   <table role="presentation" style="width:100%;border-collapse:collapse;margin-top:14px;">
@@ -1416,7 +1460,45 @@ def build_html(jobs, top, payfly, rejected, errors, run_time, held_back=None,
  </div></body></html>"""
 
 
+
+
+def _selftest():
+    """Fail loudly if assess() stops producing the fields the ranking depends on.
+
+    Three separate edits in this file silently matched nothing and disabled a
+    whole subsystem without any error. This catches that class of bug at startup.
+    """
+    probe = ("now hiring first officer caravan posted 3 days ago minimum 500 hours "
+             "housing provided week on week off kailua kona hawaii")
+    d, reject = assess(probe, {"title": "First Officer", "location": "Kailua-Kona, HI",
+                               "url": "http://x", "raw": ""})
+    problems = []
+    if reject:
+        problems.append(f"probe posting was rejected: {reject}")
+    for key in ("posted_dt", "posted", "fresh", "fresh_rank", "tier",
+                "band", "band_rank", "min_hours", "rotation", "housing", "kind"):
+        if key not in d:
+            problems.append(f"assess() did not set {key!r}")
+    if d.get("min_hours") != 500:
+        problems.append(f"hour parsing: expected 500, got {d.get('min_hours')}")
+    if d.get("fresh_rank") != 1:
+        problems.append(f"freshness: expected rank 1, got {d.get('fresh_rank')}")
+    if d.get("tier") != 3:
+        problems.append(f"geography: expected Hawaii (3), got {d.get('tier')}")
+    if not d.get("housing"):
+        problems.append("housing not detected")
+
+    old, _ = assess("now hiring survey pilot posted 2 years ago minimum 250 hours fresno california",
+                    {"title": "Survey Pilot", "location": "Fresno, CA", "url": "http://x", "raw": ""})
+    if not _:
+        problems.append("a two-year-old posting was not dropped")
+
+    if problems:
+        raise SystemExit("SELF TEST FAILED\n  " + "\n  ".join(problems))
+
+
 def main():
+    _selftest()
     # FULL_SWEEP=1 does the whole watchlist plus the research pass. Otherwise this
     # is a fast poll: hot sources and classifieds only, typically under a minute.
     full = bool(os.environ.get("FULL_SWEEP"))
@@ -1491,7 +1573,13 @@ def main():
         shown = shown + rescued
         held_back = [j for j in held_back if j["details"].get("tier") != 3]
     payfly.sort(key=lambda j: (not j["details"].get("good_deal"), j["details"].get("price_sort", 10**9)))
-    run_time = datetime.now(timezone.utc).astimezone().strftime("%b %d, %Y at %I:%M %p %Z")
+    # GitHub runners are set to UTC, so .astimezone() alone renders UTC. Pin it to
+    # the two zones that actually matter and show both.
+    _now = datetime.now(timezone.utc)
+    _pt = _now.astimezone(ZoneInfo("America/Los_Angeles"))
+    _hi = _now.astimezone(ZoneInfo("Pacific/Honolulu"))
+    run_time = (_pt.strftime("%b %-d, %Y at %-I:%M %p %Z")
+                + " / " + _hi.strftime("%-I:%M %p HST"))
     research = research_pass(errors) if full else None
     html = build_html(live, top, payfly, rejected, errors, run_time, research)
 
