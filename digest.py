@@ -59,6 +59,19 @@ EXCLUDE = {
 
 # A school selling training and an operator hiring a pilot use much of the same
 # vocabulary. These phrases only appear on the selling side. Any hit drops the row.
+# Aviation employers hire far more non-pilots than pilots. A careers page that
+# says "now hiring" is usually not hiring a pilot.
+NOT_A_PILOT_ROLE = [
+    "mechanic", "a&p ", "a & p", "airframe and powerplant", "avionics",
+    "maintenance technician", "maintenance controller", "aircraft technician",
+    "dispatcher", "flight dispatcher", "load planner", "ramp agent", "ramp service",
+    "line service", "lineman", "fueler", "customer service agent", "gate agent",
+    "flight attendant", "cabin crew", "reservations", "ticket agent",
+    "accountant", "bookkeeper", "receptionist", "marketing manager",
+    "sales representative", "office manager", "parts clerk", "detailer",
+    "cleaner", "janitorial", "security officer", "warehouse",
+]
+
 TRAINING_PROGRAM = [
     # Commercial and financial language. A school selling seats says these; an
     # operator hiring a pilot never does.
@@ -102,7 +115,8 @@ WANTED_TITLES = [
     r"pipeline patrol", r"power ?line patrol", r"utility patrol", r"patrol pilot",
     r"banner tow", r"aerial advertis", r"skydive", r"skydiving", r"jump pilot",
     r"parachute", r"glider tow", r"tow pilot", r"traffic watch", r"fish spot",
-    r"air ambulance", r"medevac", r"tour pilot", r"air tour", r"scenic",
+    r"air ambulance", r"medevac", r"tour pilot", r"scenic (?:tour )?pilot",
+    r"air tour pilot",
     r"ferry pilot", r"contract pilot", r"aerial (?:imag|map|photo|data)",
     r"survey pilot", r"mapping pilot", r"sensor operator", r"\bISR\b",
     r"cargo feeder", r"feeder pilot", r"check ?hauling", r"night freight",
@@ -630,6 +644,10 @@ def assess(text, job):
             return d, reason
 
     title_l = job.get("title", "").lower()
+    hit = next((r for r in NOT_A_PILOT_ROLE if r in title_l), None)
+    if hit:
+        return d, f"not a pilot role ({hit.strip()})"
+
     if re.search(r"\b(program|academy|course|curriculum|pathway|cadet|"
                  r"training|school|admissions|scholarship|internship|"
                  r"apprentice|bootcamp|camp)\b", title_l):
@@ -701,6 +719,13 @@ def assess(text, job):
             return d, f"posted {d.get('posted', 'long ago')}, {age} days old"
     d["fresh"], d["fresh_rank"] = freshness_band(pdt)
     d["reach"] = bool(d["min_hours"] and d["min_hours"] > BAND_NOW)
+
+    # Text-mode finds with nothing concrete attached are almost always marketing
+    # copy that happened to sit near a hiring phrase.
+    if job.get("text_only") and not any([job.get("location"), d.get("min_hours"),
+                                         d.get("posted_dt"), d.get("rotation"),
+                                         d.get("housing")]):
+        return d, "no location, hours or date given"
 
     d["kind"] = "sim" if re.search(r"simulator|second[- ]in[- ]command|support crew|seat support",
                                    job["title"], re.I) else "line"
@@ -1000,7 +1025,13 @@ HOT_SOURCES = [
 
 
 def _hashes():
-    return json.loads(POLL_STATE.read_text()) if POLL_STATE.exists() else {}
+    if not POLL_STATE.exists():
+        return {}
+    try:
+        return json.loads(POLL_STATE.read_text())
+    except Exception:
+        print("page_hashes.json unreadable, starting fresh")
+        return {}
 
 
 def _save_hashes(h):
@@ -1169,7 +1200,15 @@ def dedupe(rows):
 
 
 def load_seen():
-    return set(json.loads(STATE_FILE.read_text())) if STATE_FILE.exists() else set()
+    """Corrupt state is recoverable; a crash is not. A merge conflict can leave
+    markers in these files, so parse failures start fresh instead of aborting."""
+    if not STATE_FILE.exists():
+        return set()
+    try:
+        return set(json.loads(STATE_FILE.read_text()))
+    except Exception:
+        print("seen.json unreadable, starting fresh")
+        return set()
 
 
 def save_seen(u):
