@@ -139,14 +139,20 @@ TIER3 = ["hi", "hawaii", "honolulu", "kailua", "kona", "hilo", "lihue", "kahului
 TIER4 = ["ak", "alaska", "anchorage", "fairbanks", "juneau", "bethel", "kenai",
          "kodiak", "nome", "sitka", "ketchikan", "dillingham", "valdez", "homer",
          "talkeetna", "palmer", "wasilla", "lake hood", "merrill field"]
-TIER5 = ["or", "oregon", "wa", "washington", "nv", "nevada", "az", "arizona",
-         "id", "idaho", "seattle", "portland", "spokane", "boise", "reno",
-         "phoenix", "bend", "redmond", "hillsboro", "renton", "everett",
-         "bellingham", "kenmore", "medford"]
+TIER5 = ["az", "arizona", "marana", "pinal", "pinal airpark", "tucson", "phoenix",
+         "mesa", "chandler", "scottsdale", "glendale", "peoria", "gilbert",
+         "tempe", "prescott", "goodyear", "casa grande", "deer valley",
+         "falcon field", "coolidge", "buckeye", "yuma", "flagstaff", "sedona",
+         "kingman", "bullhead", "lake havasu", "sierra vista", "safford",
+         "show low", "page az", "winslow", "payson"]
+TIER6 = ["or", "oregon", "wa", "washington", "nv", "nevada", "id", "idaho",
+         "seattle", "portland", "spokane", "boise", "reno", "las vegas",
+         "bend", "redmond", "hillsboro", "renton", "everett", "bellingham",
+         "kenmore", "medford", "eugene", "salem", "yakima", "wenatchee"]
 
 TIER_LABEL = {1: "Northern California", 2: "Rest of California", 3: "Hawaii",
-              4: "Alaska", 5: "Pacific Northwest and inland West",
-              6: "Outside his geography"}
+              4: "Alaska", 5: "Arizona", 6: "Pacific Northwest and inland West",
+              7: "Outside his geography"}
 
 # Anything landing in tier 4 is dropped. His geography is Alaska, Washington,
 # Oregon, California and Hawaii, plus the immediately adjacent inland West.
@@ -192,6 +198,9 @@ PROFILE = [
       "bakersfield", "torrance", "hawthorne", "burbank", "chino", "camarillo"]),
     ("Hawaii, warm weather and home", 5,
      ["hawaii", "honolulu", "kona", "hilo", "lihue", "kahului", "maui", "oahu"]),
+    ("Arizona, where the fast turbine hour-building seats are", 3,
+     ["arizona", "marana", "pinal", "tucson", "phoenix", "mesa", "chandler",
+      "prescott", "goodyear", "casa grande", "coolidge", "deer valley"]),
     ("Alaska, where the hours pile up fastest but the weather does not suit him", 1,
      ["alaska", "anchorage", "fairbanks", "juneau", "ketchikan", "sitka", "bethel",
       "kodiak", "nome", "dillingham", "kenai", "talkeetna", "palmer"]),
@@ -237,7 +246,7 @@ def score_fit(text, job, d):
         reasons.insert(0, f"states {d['min_hours']} hours, {d['min_hours'] - CURRENT_HOURS} short")
     elif d.get("band_rank") == 3:
         score -= 5
-    score += {1: 4, 2: 3, 3: 3, 4: 1, 5: 1}.get(d.get("tier"), 0)
+    score += {1: 4, 2: 3, 3: 3, 4: 1, 5: 2, 6: 1}.get(d.get("tier"), 0)
 
     fresh_points = {0: 3, 1: 2, 2: 0, 3: -3}.get(d.get("fresh_rank"), 0)
     if fresh_points:
@@ -696,13 +705,14 @@ def assess(text, job):
             return d, f"needs {h} hours, he is at Horizon before that"
 
     loc = (job.get("location", "") + " " + text[:500]).lower()
-    d["tier"] = 6
-    for n, group in ((1, TIER1), (2, TIER2), (3, TIER3), (4, TIER4), (5, TIER5)):
+    d["tier"] = 7
+    for n, group in ((1, TIER1), (2, TIER2), (3, TIER3), (4, TIER4),
+                     (5, TIER5), (6, TIER6)):
         if any(re.search(rf"\b{re.escape(t)}\b", loc) for t in group):
             d["tier"] = n
             break
 
-    if DROP_OUTSIDE_GEOGRAPHY and d["tier"] == 6:
+    if DROP_OUTSIDE_GEOGRAPHY and d["tier"] == 7:
         return d, "outside his geography"
 
     # He already instructs in the Bay Area, so a California CFI job is sideways.
@@ -847,7 +857,8 @@ FERRY_TERMS = ["ferry pilot", "ferry flight", "reposition", "repositioning",
                "owner needs pilot", "part 91 pilot"]
 
 CRAIGSLIST_SITES = ["sfbay", "sacramento", "monterey", "chico", "redding",
-                    "honolulu", "anchorage", "losangeles", "sandiego", "fresno"]
+                    "honolulu", "anchorage", "losangeles", "sandiego", "fresno",
+                    "phoenix", "tucson"]
 
 REDDIT_QUERIES = [
     "https://www.reddit.com/r/flying/search.rss?q=ferry+pilot&restrict_sr=1&sort=new&t=month",
@@ -920,7 +931,14 @@ COMPANIES_ROTATION = [
     "Alaska Air Transit", "Island Air Express Alaska",
     # Hawaii
     "Mokulele Airlines Hawaii first officer", "Southern Airways Corporation pilot",
-    "Paragon Air Hawaii", "Rampart Aviation Marana Arizona",
+    "Paragon Air Hawaii",
+    # Arizona, where the low-time turbine seats are
+    "Rampart Aviation Marana Arizona", "Skydive Arizona Eloy pilot",
+    "Ping Aviation Arizona", "Westwind Air Service Phoenix",
+    "Grand Canyon Airlines pilot", "Scenic Airlines Arizona",
+    "Air Methods fixed wing Arizona", "Native Air Arizona fixed wing",
+    "Silver State Helicopters fixed wing Arizona", "Chandler Air Service",
+    "Skydive Phoenix pilot", "Marana Aerospace pilot",
     # California and the West
     "West Air Fresno", "Ameriflight", "Bridgeford Flying Service Napa",
     "Surf Air Mobility", "Boutique Air", "Contour Airlines", "Kenmore Air",
@@ -1508,7 +1526,7 @@ def build_html(jobs, top, payfly, rejected, errors, run_time, held_back=None,
    <div style="font-size:12px;opacity:.7;margin-top:5px;line-height:1.5;">
     Confirmed still open at {run_time}.
     California, Hawaii, Alaska and the West. Fixed wing. Nothing above {MAX_MINIMUM} hours.
-    Instructor roles count only in Hawaii. Training programs, commitment contracts and
+    California, Hawaii, Arizona, Alaska and the West. Instructor roles count only in Hawaii. Training programs, commitment contracts and
     filled postings are dropped and listed at the bottom with the reason.
     Ranked by fit: a stated minimum he meets, then credentials, schedule, housing,
     geography and how fresh the posting is. Hawaii is never cut for space.</div>
