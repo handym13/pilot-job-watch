@@ -3,7 +3,6 @@ name: Pilot job watch
 on:
   schedule:
     # Fast poll: hot sources only, roughly every 20 minutes.
-    # GitHub queues scheduled runs, so treat this as "about every 20 to 45 min".
     - cron: "*/20 * * * *"
     # Full sweep plus the research pass, once daily at 07:00 Pacific time.
     - cron: "0 14 * * *"
@@ -26,10 +25,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - run: pip install requests beautifulsoup4
+
+      # Start from whatever is on the remote so state files are current before
+      # the build. Never merge afterwards: everything we write is generated, so
+      # a merge can only corrupt it.
+      - name: Sync state
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
 
       - name: Build
         env:
@@ -42,7 +51,18 @@ jobs:
         run: |
           git config user.name  "job-agent"
           git config user.email "actions@github.com"
-          git pull --rebase --autostash || true
           git add -A
-          git diff --staged --quiet || git commit -m "update $(date -u +%Y-%m-%dT%H:%M)"
-          git push
+          git diff --staged --quiet && echo "nothing changed" && exit 0
+          git commit -m "update $(date -u +%Y-%m-%dT%H:%M)"
+          # If another run pushed while we were building, rebuild the commit on
+          # top of theirs with our generated files intact. No merge, no markers.
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push rejected, replaying on top of origin/main (attempt $attempt)"
+            git fetch origin main
+            git reset --soft origin/main
+            git add -A
+            git diff --staged --quiet || git commit -m "update $(date -u +%Y-%m-%dT%H:%M)"
+            sleep 3
+          done
+          echo "could not push after 3 attempts" && exit 1
