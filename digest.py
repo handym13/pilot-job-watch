@@ -997,15 +997,93 @@ COMPANIES_PER_RUN = 16
 
 
 def companies_for_run():
+    reg = registry()
+    extra = reg.get("companies_rotation_add", [])
+    prio = reg.get("companies_priority", [])
+    return _companies_for_run(prio, extra)
+
+
+def _companies_for_run(extra_priority=(), extra_rotation=()):
     """Priority names every run, plus a rotating slice of the rest."""
-    n = len(COMPANIES_ROTATION)
+    rotation = list(COMPANIES_ROTATION) + [c for c in extra_rotation
+                                            if c not in COMPANIES_ROTATION]
+    priority = list(COMPANIES_PRIORITY) + [c for c in extra_priority
+                                           if c not in COMPANIES_PRIORITY]
+    n = len(rotation)
     if not n:
-        return COMPANIES_PRIORITY
+        return priority
     day = datetime.now(timezone.utc).astimezone().timetuple().tm_yday
     start = (day * COMPANIES_PER_RUN) % n
-    slice_ = [COMPANIES_ROTATION[(start + i) % n] for i in range(COMPANIES_PER_RUN)]
-    return COMPANIES_PRIORITY + slice_
+    slice_ = [rotation[(start + i) % n] for i in range(COMPANIES_PER_RUN)]
+    return priority + slice_
 
+
+
+
+# ---------------------------------------------------------------- source registry
+
+# Sources live in sources.json, not in this file. Add one by editing that file;
+# no code change and no risk of breaking the build. The daily research pass also
+# appends what it discovers to the "candidates" list there.
+#
+# source_health.json records what each source has actually produced, so a source
+# that has never returned a single posting is visible rather than silently dead.
+
+REGISTRY = Path(__file__).parent / "sources.json"
+HEALTH = Path(__file__).parent / "source_health.json"
+
+
+def _load_json(path, default):
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        print(f"{path.name} unreadable, using defaults")
+        return default
+
+
+def registry():
+    return _load_json(REGISTRY, {})
+
+
+def health():
+    return _load_json(HEALTH, {})
+
+
+def registry_sources(poll=None):
+    """Flatten the registry into (name, url) pairs, optionally by poll cadence."""
+    reg, out = registry(), []
+    for key in ("boards", "forums", "operators_hot", "candidates"):
+        for s in reg.get(key, []):
+            if not s.get("url"):
+                continue
+            cadence = s.get("poll", "hot" if key == "operators_hot" else "daily")
+            if poll is None or cadence == poll:
+                out.append((s["name"], s["url"]))
+    return out
+
+
+def record_health(h, name, url, found, errored):
+    """One row per source: how often it has been checked, and what it produced."""
+    row = h.setdefault(url, {"name": name, "checks": 0, "hits": 0,
+                             "errors": 0, "last_hit": None})
+    row["name"] = name
+    row["checks"] += 1
+    if errored:
+        row["errors"] += 1
+    if found:
+        row["hits"] += found
+        row["last_hit"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return h
+
+
+def dead_sources(h, min_checks=20):
+    """Sources checked plenty and never once produced a posting."""
+    return sorted(
+        [(r["name"], u, r["checks"]) for u, r in h.items()
+         if r["checks"] >= min_checks and r["hits"] == 0],
+        key=lambda x: -x[2])
 
 
 # ---------------------------------------------------------------- detection speed
@@ -1042,6 +1120,11 @@ HOT_SOURCES = [
 ]
 
 
+def hot_sources():
+    """Registry first, falling back to the built-in list if the file is missing."""
+    return registry_sources(poll="hot") or HOT_SOURCES
+
+
 def _hashes():
     if not POLL_STATE.exists():
         return {}
@@ -1056,11 +1139,17 @@ def _save_hashes(h):
     POLL_STATE.write_text(json.dumps(h, indent=1, sort_keys=True))
 
 
-def poll(sources, hashes):
-    """Fetch each source; parse only the ones whose content actually changed."""
+def poll(sources, hashes, h=None):
+    """Fetch each source; parse only the ones whose content actually changed.
+
+    Records per-source health too, so a source checked a hundred times that has
+    never produced a posting shows up as a problem rather than a silent zero.
+    """
     import hashlib
+    h = health() if h is None else h
     rows, checked, skipped = [], 0, 0
     for name, url in sources:
+        got, errored = 0, False
         try:
             r = requests.get(url, headers=UA, timeout=TIMEOUT)
             checked += 1
@@ -1068,12 +1157,17 @@ def poll(sources, hashes):
             digest = hashlib.sha256(body).hexdigest()[:16]
             if hashes.get(url) == digest:
                 skipped += 1
+                record_health(h, name, url, 0, False)
                 continue
             hashes[url] = digest
             found = _rows_from_links(r.text, name, "/".join(url.split("/")[:3]))
-            rows += found or _rows_from_text(r.text, name, url)
+            found = found or _rows_from_text(r.text, name, url)
+            got = len(found)
+            rows += found
         except Exception as e:
+            errored = True
             rows.append({"source": name, "error": str(e), "url": url})
+        record_health(h, name, url, got, errored)
     return rows, checked, skipped
 
 
@@ -1170,6 +1264,13 @@ Then do these, in priority order:
    survey, pipeline patrol, banner tow, and seasonal hiring in his geography.
 3. For each unreachable source above, find its current careers URL.
 4. Name operators worth adding to the permanent list, with a careers URL.
+5. SOURCE DISCOVERY, the important one. Find job boards, aggregators, forums,
+   association boards, regional listings and operator directories that a search
+   like this should be watching and probably is not. Think beyond the obvious
+   national boards: state aviation association boards, seasonal and bush flying
+   listings, skydive and survey operator directories, university and college
+   flight department boards, and regional classifieds. For each, give a URL that
+   lists jobs rather than a homepage.
 
 Return ONLY a JSON object, no preamble, no markdown fences:
 {{"findings":[{{"title":"","employer":"","location":"","min_hours":"","schedule":"",
@@ -1177,6 +1278,8 @@ Return ONLY a JSON object, no preamble, no markdown fences:
 "url":"","why":"one sentence on why it fits him"}}],
 "url_fixes":[{{"source":"","new_url":""}}],
 "new_sources":[{{"name":"","url":"","note":""}}],
+"discovered_sources":[{{"name":"","url":"","kind":"board|forum|directory|classified",
+"why":"what this covers that the current list misses"}}],
 "summary":"two or three sentences on what today's search actually turned up, including
 which companies you checked and found nothing at"}}
 
@@ -1200,6 +1303,7 @@ posting, an hour minimum, or a URL."""
         out = json.loads(text[start:end + 1]) if start >= 0 else None
         if out is not None:
             out["checked"] = names
+            _absorb_sources(out.get("discovered_sources", []))
         return out
     except Exception as e:
         return {"error": str(e), "findings": [], "url_fixes": [],
@@ -1277,6 +1381,26 @@ def build_html(jobs, top, payfly, rejected, errors, run_time, held_back=None,
             <br><span style="color:#8a5a00;font-size:11px;">{d['band']}</span></td>
           <td style="{TD}"><a href="{j['url']}" style="color:#1f6feb;">Open</a></td>
         </tr>"""
+
+    _h = health()
+    _live = sum(1 for r in _h.values() if r.get("hits", 0) > 0)
+    _dead = dead_sources(_h)
+    cov = ""
+    if _h:
+        dead_items = "".join(
+            f"<li style='margin-bottom:3px;'><a href='{u}' style='color:#1f6feb;"
+            f"text-decoration:none;'>{n}</a> <span style='color:#8a939c;'>"
+            f"{c} checks, nothing found</span></li>" for n, u, c in _dead[:20])
+        cov = (f'<details style="margin-top:12px;">'
+               f'<summary style="font-size:12px;color:#5b6570;cursor:pointer;list-style:revert;">'
+               f'<strong>{len(_h)} sources tracked</strong> &middot; {_live} have produced '
+               f'postings, {len(_dead)} never have</summary>'
+               f'<p style="font-size:12px;color:#8a939c;margin:10px 0 6px;">'
+               f'Checked many times and never returned a posting. Either the URL is '
+               f'wrong, the page renders in JavaScript, or the source genuinely has '
+               f'nothing in his band. Worth a look before trusting a quiet week.</p>'
+               f'<ul style="font-size:12px;color:#5b6570;line-height:1.6;'
+               f'padding-left:18px;">{dead_items}</ul></details>')
 
     cut_note = ""
     if held_back:
@@ -1543,7 +1667,7 @@ def build_html(jobs, top, payfly, rejected, errors, run_time, held_back=None,
         <th style="{TH}">Posted</th><th style="{TH}">Min hrs</th>
         <th style="{TH}">Link</th></tr></thead>
        <tbody>{rows or empty}</tbody></table>
-      {cut_note}{rej}{err}
+      {cut_note}{rej}{err}{cov}
      </div>
      {payfly_card}
      {ferry_card}
@@ -1626,12 +1750,19 @@ def main():
     hashes = _hashes()
 
     raw, errors = [], []
-    hot_rows, checked, skipped = poll(HOT_SOURCES, hashes)
+    h = health()
+    hot_rows, checked, skipped = poll(hot_sources(), hashes, h)
     for row in hot_rows:
         (errors.append((row["source"], row["error"][:90], row.get("url", "")))
          if "error" in row else raw.append(row))
 
     if full:
+        for name, url in registry_sources(poll="daily"):
+            for row in scrape(name, url):
+                if "error" in row:
+                    errors.append((row["source"], row["error"][:90], row.get("url", "")))
+                else:
+                    raw.append(row)
         for fn in WATCHLIST:
             for row in fn():
                 if "error" in row:
@@ -1709,6 +1840,7 @@ def main():
     (out / "index.html").write_text(html)
     save_seen(seen | {j["url"] for j in live})
     _save_hashes(hashes)
+    HEALTH.write_text(json.dumps(h, indent=1, sort_keys=True))
     mode = "full sweep" if full else "fast poll"
     print(f"{mode}: {checked} hot sources checked, {skipped} unchanged and skipped. "
           f"{len(live)} match(es), {len(brand_new)} NEW, {len(top)} top fit.")
@@ -1716,3 +1848,36 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def _absorb_sources(found):
+    """Append newly discovered sources to sources.json so the list grows itself.
+
+    Written as candidates rather than into the main lists: they get polled, and
+    source_health.json will show within a week whether they are worth keeping.
+    """
+    if not found:
+        return
+    reg = registry()
+    if not reg:
+        return
+    known = {s.get("url") for k in ("boards", "forums", "operators_hot", "candidates")
+             for s in reg.get(k, [])}
+    added = 0
+    for s in found:
+        url = (s.get("url") or "").strip()
+        if not url.startswith("http") or url in known:
+            continue
+        reg.setdefault("candidates", []).append({
+            "name": s.get("name", "unnamed")[:60],
+            "url": url,
+            "poll": "daily",
+            "kind": s.get("kind", "unknown"),
+            "note": (s.get("why") or "")[:160],
+            "added": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        })
+        known.add(url)
+        added += 1
+    if added:
+        REGISTRY.write_text(json.dumps(reg, indent=2))
+        print(f"registry: added {added} discovered source(s)")
