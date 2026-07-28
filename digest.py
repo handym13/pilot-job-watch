@@ -440,6 +440,8 @@ WATCHLIST = [
        "https://www.glassdoor.com/Jobs/Southern-Airways-Express-Jobs-E1907708.htm"),
     op("Southern / Mokulele on Indeed",
        "https://www.indeed.com/cmp/Southern-Airways-Express"),
+    op("FlightHired", "https://flighthired.com/job/"),                        # verified
+    op("BizJetJobs low time", "https://bizjetjobs.com/low-time-pilots"),      # verified
     op("Road to 1500, Southern deep dive",
        "https://www.roadto1500.com/p/southern-airways-express-deep-dive"),
 
@@ -586,6 +588,16 @@ def assess(text, job):
 
     # Real postings phrase this a dozen ways. Catch the common ones, then take
     # the smallest number found, since that is the entry requirement.
+    # A preferred figure is an aspiration, not a gate. Pull those out before
+    # looking for the real minimum, and remember them separately.
+    soft = re.findall(r"(\d{1,2},\d{3}|\d{3,4})\s*\+?\s*(?:total\s*)?(?:flight\s*)?"
+                      r"(?:hours|hrs|tt)[^.;]{0,30}?"
+                      r"(?:preferred|desired|desirable|a plus|nice to have|ideally)", low)
+    d["preferred_hours"] = min(int(x.replace(",", "")) for x in soft) if soft else None
+    low = re.sub(r"(\d{1,2},\d{3}|\d{3,4})\s*\+?\s*(?:total\s*)?(?:flight\s*)?"
+                 r"(?:hours|hrs|tt)[^.;]{0,30}?"
+                 r"(?:preferred|desired|desirable|a plus|nice to have|ideally)", " ", low)
+
     # Strip qualified hour figures first. "4,000 TT, 600 hours time in type" must
     # not read as a 600 hour job. Same for PIC, multi, turbine and night sub-minima.
     # Allow "time", "=", "of", "is" and similar between the qualifier and the number:
@@ -651,7 +663,10 @@ def assess(text, job):
             (not d["price_hourly"] and d["price_total"] and d["price_total"] <= PAYFLY_GOOD_TOTAL))
 
     h = d["min_hours"]
-    if h is None:
+    if h is None and d.get("preferred_hours"):
+        d["band"] = f"{d['preferred_hours']} preferred, none required"
+        d["band_rank"] = 1
+    elif h is None:
         d["band"], d["band_rank"] = "unstated", 2
     elif h <= BAND_NOW:
         d["band"], d["band_rank"] = "meets it", 0
@@ -880,7 +895,7 @@ COMPANIES_ROTATION = [
     "Alaska Air Transit", "Island Air Express Alaska",
     # Hawaii
     "Mokulele Airlines Hawaii first officer", "Southern Airways Corporation pilot",
-    "Paragon Air Hawaii",
+    "Paragon Air Hawaii", "Rampart Aviation Marana Arizona",
     # California and the West
     "West Air Fresno", "Ameriflight", "Bridgeford Flying Service Napa",
     "Surf Air Mobility", "Boutique Air", "Contour Airlines", "Kenmore Air",
@@ -977,6 +992,8 @@ HOT_SOURCES = [
     ("Kenmore Air", "https://www.kenmoreair.com/careers/"),
     ("Grant Aviation", "https://www.flygrant.com/careers"),
     ("Ravn Alaska", "https://www.flyravn.com/careers/"),
+    ("FlightHired", "https://flighthired.com/job/"),
+    ("BizJetJobs low time", "https://bizjetjobs.com/low-time-pilots"),
     ("Road to 1500", "https://www.roadto1500.com/p/community-database"),
     ("Low Time Pilot", "https://www.lowtimepilot.com/"),
 ]
