@@ -730,6 +730,10 @@ def assess(text, job):
     d["fresh"], d["fresh_rank"] = freshness_band(pdt)
     d["reach"] = bool(d["min_hours"] and d["min_hours"] > BAND_NOW)
 
+    ok, why = looks_like_a_posting(job, text)
+    if not ok:
+        return d, why
+
     # Text-mode finds with nothing concrete attached are almost always marketing
     # copy that happened to sit near a hiring phrase.
     if job.get("text_only") and not any([job.get("location"), d.get("min_hours"),
@@ -1310,6 +1314,132 @@ posting, an hour minimum, or a URL."""
                 "new_sources": [], "summary": "", "checked": names}
 
 
+
+# ---------------------------------------------------------------- vetting
+
+# A forum thread about jobs is not a job. Neither is a listicle, a guide, or an
+# aggregator's index page. These run before anything is published.
+
+ARTICLE_URL = [
+    "/blog/", "/p/", "/article", "/news/", "/guide", "/threads/", "/thread/",
+    "/community/", "/forum", "/forums/", "/showthread", "/topic/", "/t/",
+    "/resources", "/advice", "/tips", "/how-to", "/wiki", "reddit.com/r/",
+    "/posts/", "/story/", "medium.com", "substack.com",
+]
+
+ARTICLE_TITLE = [
+    "where to find", "how to find", "how to get", "best sites", "best places",
+    "top ", " guide", "guide to", "everything you need", "what you need to know",
+    "opportunities under", "jobs for low", "low time pilot jobs", "list of",
+    "ultimate", "beginner", "explained", "vs ", " tips", "faq", "q&a",
+    "database", "directory", "roundup", "career paths", "salary",
+]
+
+# Pages whose job is to list other people's jobs. Their index is not a posting.
+INDEX_HINTS = ["job board", "search jobs", "browse jobs", "all jobs",
+               "latest jobs", "job listings", "find jobs"]
+
+# A board's own category page is not a posting, and it usually says so plainly.
+INDEX_TITLES = {
+    "jobs", "pilot jobs", "aviation jobs", "flying jobs", "careers", "career",
+    "career opportunities", "employment", "employment opportunities",
+    "job openings", "open positions", "current openings", "openings",
+    "find jobs", "search jobs", "job search", "vacancies", "pilot careers",
+    "join our team", "work with us", "apply now", "positions",
+}
+
+
+def looks_like_a_posting(job, text=""):
+    """Return (ok, reason). Conservative: unsure means no."""
+    url = (job.get("url") or "").lower()
+    title = (job.get("title") or "").strip()
+    tl = title.lower()
+
+    if not title or len(title) < 4:
+        return False, "no title"
+
+    if any(p in url for p in ARTICLE_URL):
+        return False, "article or forum thread, not a posting"
+
+    if tl.strip(" -|:") in INDEX_TITLES:
+        return False, "index page, not a posting"
+
+    if any(p in tl for p in ARTICLE_TITLE):
+        return False, "reads like an article, not a posting"
+
+    # Real postings carry an identifier. A bare category path is an index.
+    path = url.split("?")[0].rstrip("/").split("/")[-1] if url else ""
+    if path and not re.search(r"\d", path) and len(path.split("-")) < 3 \
+            and any(url.rstrip("/").endswith(seg) for seg in
+                    ("/jobs", "/jobs/pilot", "/careers", "/pilot-jobs",
+                     "/employment", "/openings", "/job")):
+        return False, "index page, not a posting"
+
+    # A title that is a whole sentence is prose, not a job title.
+    if len(title.split()) > 12 or title.rstrip().endswith((".", "?", "!")):
+        return False, "prose, not a job title"
+
+    # Text-mode finds on an index page are the source describing itself.
+    if job.get("text_only") and any(h in (text[:4000] or "").lower() for h in INDEX_HINTS):
+        return False, "index page describing itself"
+
+    return True, ""
+
+
+VET_MODEL = "claude-sonnet-5"
+
+
+def vet_with_llm(candidates):
+    """Ask Claude to confirm each candidate is a real, specific, open posting.
+
+    Returns a dict of index -> (keep, reason, fields). Without an API key this
+    is skipped and the heuristics above stand on their own.
+    """
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key or not candidates:
+        return {}
+
+    listing = "\n".join(
+        f'{i}. title="{c.get("title","")}" source="{c.get("source","")}" '
+        f'url="{c.get("url","")}" context="{(c.get("context") or "")[:300]}"'
+        for i, c in enumerate(candidates))
+
+    prompt = f"""Each line below was scraped by a job search and may or may not be a real
+job posting. Plenty will be forum threads, blog articles, job-board index pages, or
+marketing copy that merely mentions hiring.
+
+Keep an entry ONLY if it is a specific, currently open job opening at a named employer.
+Drop it if it is any of: an article or guide about jobs, a forum discussion, a job
+board's own index or category page, a training program being sold, a non-pilot role,
+or something too vague to identify the employer and the role.
+
+{listing}
+
+Return ONLY a JSON array, no prose and no markdown fences:
+[{{"i":0,"keep":true,"employer":"","role":"","reason":"short"}}]
+
+Be strict. When you cannot tell, keep=false. It is much better to drop a real posting
+than to publish a forum thread as if it were a job."""
+
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model": VET_MODEL, "max_tokens": 4000,
+                  "messages": [{"role": "user", "content": prompt}]},
+            timeout=120)
+        blocks = r.json().get("content", [])
+        txt = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+        txt = re.sub(r"^```(?:json)?|```$", "", txt.strip(), flags=re.M).strip()
+        s, e = txt.find("["), txt.rfind("]")
+        rows = json.loads(txt[s:e + 1]) if s >= 0 else []
+        return {int(x["i"]): x for x in rows if "i" in x}
+    except Exception as e:
+        print(f"vetting pass unavailable ({e}), heuristics only")
+        return {}
+
+
 # ---------------------------------------------------------------- output
 
 def dedupe(rows):
@@ -1816,6 +1946,22 @@ def main():
                              recency(j)))
     # Hawaii is a thin market and it matters more than its volume suggests, so a
     # Hawaii posting is never cut for space even if it scores below the line.
+    # Cheap filters have run. Anything still standing gets adjudicated by Claude,
+    # which is far better than regex at telling a posting from a thread about one.
+    verdicts = vet_with_llm(live)
+    if verdicts:
+        kept = []
+        for i, j in enumerate(live):
+            v = verdicts.get(i)
+            if v and not v.get("keep", True):
+                rejected.append((j, f"vetting: {v.get('reason', 'not a real posting')}"))
+                continue
+            if v and v.get("employer"):
+                j["details"]["employer"] = v["employer"]
+            kept.append(j)
+        print(f"vetting: {len(live) - len(kept)} of {len(live)} rejected by review")
+        live = kept
+
     brand_new = [j for j in live if j["is_new"]]
     notify(sorted(brand_new, key=lambda j: -j["details"].get("score", 0)))
 
