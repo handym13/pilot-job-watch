@@ -211,6 +211,10 @@ PROFILE = [
     ("Turbine exposure: DHC-3 and C-208", 2,
      ["caravan", "c208", "c-208", "208b", "grand caravan", "dhc", "otter", "beaver",
       "turbine", "pt6", "king air", "be20", "1900"]),
+    ("Remote turbine SIC seat, the fastest two-crew time available to him", 3,
+     ["pc-12", "pc12", "pilatus", "king air", "be20", "b200", "c208", "caravan",
+      "casa 212", "cn-235", "dhc-6", "twin otter", "dhc-8", "metroliner", "sa227",
+      "1900", "be1900", "navajo", "chieftain", "conquest", "cheyenne"]),
     ("Two-crew seat, logs time", 2,
      ["second in command", "first officer", "sic", "co-pilot", "two-pilot", "two crew"]),
     ("Trains low-time pilots", 2,
@@ -247,6 +251,12 @@ def score_fit(text, job, d):
     elif d.get("band_rank") == 3:
         score -= 5
     score += {1: 4, 2: 3, 3: 3, 4: 1, 5: 2, 6: 1}.get(d.get("tier"), 0)
+
+    # Rotation cancels the geography objection: two weeks on means he is home the
+    # other two, so a cold or remote base stops being the drawback it otherwise is.
+    if d.get("rotation") and d.get("tier") in (4, 5, 6):
+        score += 3
+        reasons.append("rotational, so the remote base costs him half a month, not a move")
 
     fresh_points = {0: 3, 1: 2, 2: 0, 3: -3}.get(d.get("fresh_rank"), 0)
     if fresh_points:
@@ -731,14 +741,18 @@ def assess(text, job):
     d["reach"] = bool(d["min_hours"] and d["min_hours"] > BAND_NOW)
 
     ok, why = looks_like_a_posting(job, text)
-    if not ok:
+    if not ok and SOURCE_TRUST.get(job.get("source", ""), "normal") != "high":
         return d, why
 
-    # Text-mode finds with nothing concrete attached are almost always marketing
-    # copy that happened to sit near a hiring phrase.
-    if job.get("text_only") and not any([job.get("location"), d.get("min_hours"),
-                                         d.get("posted_dt"), d.get("rotation"),
-                                         d.get("housing")]):
+    # Curated boards vet their own listings, so thin data there means the details
+    # are behind a membership wall, not that the job is fake. Only untrusted
+    # text-mode finds have to prove themselves.
+    trust = SOURCE_TRUST.get(job.get("source", ""), "normal")
+    d["paywalled"] = bool(trust == "high" and not d.get("min_hours")
+                          and not job.get("context"))
+    if (trust != "high" and job.get("text_only")
+            and not any([job.get("location"), d.get("min_hours"),
+                         d.get("posted_dt"), d.get("rotation"), d.get("housing")])):
         return d, "no location, hours or date given"
 
     d["kind"] = "sim" if re.search(r"simulator|second[- ]in[- ]command|support crew|seat support",
@@ -1055,6 +1069,9 @@ def health():
     return _load_json(HEALTH, {})
 
 
+SOURCE_TRUST = {}
+
+
 def registry_sources(poll=None):
     """Flatten the registry into (name, url) pairs, optionally by poll cadence."""
     reg, out = registry(), []
@@ -1063,6 +1080,8 @@ def registry_sources(poll=None):
             if not s.get("url"):
                 continue
             cadence = s.get("poll", "hot" if key == "operators_hot" else "daily")
+            SOURCE_TRUST[s["name"]] = s.get(
+                "trust", "high" if key == "operators_hot" else "normal")
             if poll is None or cadence == poll:
                 out.append((s["name"], s["url"]))
     return out
@@ -1399,6 +1418,8 @@ def vet_with_llm(candidates):
     if not key or not candidates:
         return {}
 
+    # Some boards hide the employer behind a membership wall. A missing employer
+    # is not evidence the posting is fake, so the reviewer is told so explicitly.
     listing = "\n".join(
         f'{i}. title="{c.get("title","")}" source="{c.get("source","")}" '
         f'url="{c.get("url","")}" context="{(c.get("context") or "")[:300]}"'
@@ -1411,7 +1432,12 @@ marketing copy that merely mentions hiring.
 Keep an entry ONLY if it is a specific, currently open job opening at a named employer.
 Drop it if it is any of: an article or guide about jobs, a forum discussion, a job
 board's own index or category page, a training program being sold, a non-pilot role,
-or something too vague to identify the employer and the role.
+or something too vague to identify the role.
+
+Note: some boards (BizJetJobs among them) hide the employer name behind a paywall.
+A missing employer is NOT grounds to drop a posting that names a specific role,
+aircraft and location. Judge on whether it is a real opening, not on whether the
+employer is visible.
 
 {listing}
 
@@ -1496,11 +1522,16 @@ def build_html(jobs, top, payfly, rejected, errors, run_time, held_back=None,
                  'border-radius:2px;">HOUSING</span>' if d.get("housing") else "")
         isle = ('<span style="background:#0f8a8a;color:#fff;font-size:10px;padding:1px 5px;'
                 'border-radius:2px;">HAWAII</span>' if d.get("tier") == 3 else "")
+        wall = ('<span style="border:1px solid #8a939c;color:#5b6570;font-size:10px;'
+                'padding:1px 5px;border-radius:2px;">DETAILS WALLED</span>'
+                if d.get("paywalled") else "")
+        pin = ('<span style="background:#5b6570;color:#fff;font-size:10px;padding:1px 5px;'
+               'border-radius:2px;">PINNED</span>' if j.get("pinned") else "")
         kind = ('<span style="border:1px solid #5b6570;color:#5b6570;font-size:10px;'
                 'padding:1px 5px;">SIM</span>') if d["kind"] == "sim" else ""
         rows += f"""
         <tr>
-          <td style="{TD}font-size:14px;"><strong>{j['title']}</strong> {star} {isle} {house} {badge} {kind}
+          <td style="{TD}font-size:14px;"><strong>{j['title']}</strong> {star} {isle} {house} {wall} {pin} {badge} {kind}
             <br><span style="color:#5b6570;font-size:12px;">{j['source']}</span></td>
           <td style="{TD}">{j.get('location') or 'not stated'}
             <br><span style="color:#5b6570;font-size:11px;">{tier}</span>
@@ -1948,7 +1979,11 @@ def main():
     # Hawaii posting is never cut for space even if it scores below the line.
     # Cheap filters have run. Anything still standing gets adjudicated by Claude,
     # which is far better than regex at telling a posting from a thread about one.
-    verdicts = vet_with_llm(live)
+    pins = pinned_jobs()
+    have = {j.get("url") for j in live}
+    live += [p for p in pins if p.get("url") not in have]
+
+    verdicts = vet_with_llm([j for j in live if not j.get("pinned")])
     if verdicts:
         kept = []
         for i, j in enumerate(live):
@@ -1992,8 +2027,6 @@ def main():
           f"{len(live)} match(es), {len(brand_new)} NEW, {len(top)} top fit.")
 
 
-if __name__ == "__main__":
-    main()
 
 
 def _absorb_sources(found):
@@ -2027,3 +2060,26 @@ def _absorb_sources(found):
     if added:
         REGISTRY.write_text(json.dumps(reg, indent=2))
         print(f"registry: added {added} discovered source(s)")
+
+
+def pinned_jobs():
+    """Jobs carried on every run regardless of what the scrapers return."""
+    out = []
+    for p in registry().get("pinned", []):
+        job = {"source": p.get("employer") or "pinned",
+               "title": p.get("title", ""), "url": p.get("url", ""),
+               "location": p.get("location", ""), "raw": "", "pinned": True}
+        body = " ".join(str(v) for v in p.values())
+        d, _ = assess(body, job)
+        d.setdefault("fresh", "pinned"); d.setdefault("fresh_rank", 1)
+        d.setdefault("posted", "pinned")
+        d["note"] = p.get("note", "")
+        d["score"], d["reasons"] = score_fit(body, job, d)
+        job["details"] = d
+        job["is_new"] = False
+        out.append(job)
+    return out
+
+
+if __name__ == "__main__":
+    main()

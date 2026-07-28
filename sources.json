@@ -12,98 +12,150 @@
     {
       "name": "FlightHired",
       "url": "https://flighthired.com/job/",
-      "poll": "hot"
+      "poll": "hot",
+      "trust": "high"
     },
     {
       "name": "BizJetJobs low time",
       "url": "https://bizjetjobs.com/low-time-pilots",
-      "poll": "hot"
+      "poll": "hot",
+      "trust": "high"
     },
     {
       "name": "Road to 1500 database",
       "url": "https://www.roadto1500.com/p/community-database",
-      "poll": "hot"
+      "poll": "hot",
+      "trust": "high"
     },
     {
       "name": "Low Time Pilot",
       "url": "https://www.lowtimepilot.com/",
-      "poll": "hot"
+      "poll": "hot",
+      "trust": "high"
     },
     {
       "name": "JSfirm",
       "url": "https://www.jsfirm.com/jobs/pilot",
       "poll": "daily",
-      "note": "JS rendered, may return nothing"
+      "note": "JS rendered, may return nothing",
+      "trust": "high"
     },
     {
       "name": "Climbto350",
       "url": "https://www.climbto350.com/pilot_jobs.asp",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "Pilot Career Center",
       "url": "https://pilotcareercenter.com/Pilot-Jobs",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "FindAPilot",
       "url": "https://www.findapilot.com/jobs",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "PilotsGlobal",
       "url": "https://pilotsglobal.com/pilot-jobs",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "AllFlyingJobs",
       "url": "https://www.allflyingjobs.com/pilot-jobs",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "Latest Pilot Jobs",
       "url": "https://www.latestpilotjobs.com/",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "Avjobs",
       "url": "https://www.avjobs.com/jobs/",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "Aviation Job Search",
       "url": "https://www.aviationjobsearch.com/en-US/jobs/pilots",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "Airline Apps",
       "url": "https://www.airlineapps.com/",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "NAFI board",
       "url": "https://nafimentor.org/job-board/",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "AOPA board",
       "url": "https://www.aopa.org/about/hr/aviation-job-postings",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "EAA board",
       "url": "https://www.eaa.org/eaa/eaa-membership/aviation-job-search",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "Alaska Airmen",
       "url": "https://www.alaskaairmen.org/building/career/job-work-development",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
     },
     {
       "name": "Alaska Flight School CFI",
       "url": "https://www.alaskaflightschool.net/flight-instructor-jobs-alaska.html",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "high"
+    },
+    {
+      "name": "All Aviation Jobs",
+      "url": "https://www.allaviationjob.com/jobs",
+      "poll": "hot",
+      "note": "carried the NANA PC-12 SIC that everything else missed",
+      "trust": "high"
+    },
+    {
+      "name": "Jobgether aviation",
+      "url": "https://jobgether.com/search-jobs?query=pilot",
+      "poll": "daily",
+      "trust": "high"
+    },
+    {
+      "name": "Talentify pilot",
+      "url": "https://www.talentify.io/jobs?q=pilot",
+      "poll": "daily",
+      "trust": "high"
+    },
+    {
+      "name": "DEJobs pilot",
+      "url": "https://dejobs.org/jobs/?q=pilot",
+      "poll": "daily",
+      "note": "syndicates large-employer ATS feeds including Alaska Native corporations",
+      "trust": "high"
+    },
+    {
+      "name": "BizJetJobs board",
+      "url": "https://bizjetjobs.com/jobs",
+      "poll": "hot",
+      "note": "employer name is hidden behind membership; titles and locations still scrape",
+      "trust": "high"
     }
   ],
   "forums": [
@@ -111,53 +163,64 @@
       "name": "APC Part 91 and Low Time",
       "url": "https://www.airlinepilotforums.com/part-91-low-time/",
       "poll": "hot",
-      "note": "dedicated low-time sub-forum, the best public source of leads"
+      "note": "dedicated low-time sub-forum, the best public source of leads",
+      "trust": "low"
     },
     {
       "name": "APC regional",
       "url": "https://www.airlinepilotforums.com/regional/",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "low"
     },
     {
       "name": "Pilots of America jobs",
       "url": "https://www.pilotsofamerica.com/community/forums/pilot-training.6/",
-      "poll": "daily"
+      "poll": "daily",
+      "trust": "low"
     },
     {
       "name": "Oregon Flight School list",
       "url": "https://www.oregonflightschool.com/how-to-find-low-time-pilot-job.html",
       "poll": "daily",
-      "note": "maintains a list of low-time Facebook groups worth joining by hand"
+      "note": "maintains a list of low-time Facebook groups worth joining by hand",
+      "trust": "low"
     }
   ],
   "operators_hot": [
     {
       "name": "Horizon Air",
-      "url": "https://careers.alaskaair.com/company/horizon-air/job-category/pilots/jobs/"
+      "url": "https://careers.alaskaair.com/company/horizon-air/job-category/pilots/jobs/",
+      "trust": "high"
     },
     {
       "name": "Southern / Mokulele",
-      "url": "https://www.glassdoor.com/Jobs/Southern-Airways-Express-Jobs-E1907708.htm"
+      "url": "https://www.glassdoor.com/Jobs/Southern-Airways-Express-Jobs-E1907708.htm",
+      "trust": "high"
     },
     {
       "name": "Kamaka Air",
-      "url": "https://www.kamakaair.com/careers"
+      "url": "https://www.kamakaair.com/careers",
+      "trust": "high"
     },
     {
       "name": "Ameriflight",
-      "url": "https://ameriflight.com/careers/"
+      "url": "https://ameriflight.com/careers/",
+      "trust": "high"
     },
     {
       "name": "Kenmore Air",
-      "url": "https://www.kenmoreair.com/careers/"
+      "url": "https://www.kenmoreair.com/careers/",
+      "trust": "high"
     },
     {
       "name": "Grant Aviation",
-      "url": "https://www.flygrant.com/careers"
+      "url": "https://www.flygrant.com/careers",
+      "trust": "high"
     },
     {
       "name": "Ravn Alaska",
-      "url": "https://www.flyravn.com/careers/"
+      "url": "https://www.flyravn.com/careers/",
+      "trust": "high"
     }
   ],
   "candidates": [],
@@ -167,7 +230,8 @@
     "George's Aviation Honolulu",
     "Mokulele Airlines Hawaii first officer",
     "Kamaka Air",
-    "Trail Ridge Air Anchorage"
+    "Trail Ridge Air Anchorage",
+    "NANA Regional Corporation PC-12 SIC"
   ],
   "companies_rotation_add": [
     "Westwind Air Service Phoenix",
@@ -186,6 +250,32 @@
     "Pacific Air Charters Honolulu",
     "Royal Pacific Air Honolulu",
     "Paragon Air Hawaii",
-    "Professional Pilots of Tomorrow job leads"
+    "Professional Pilots of Tomorrow job leads",
+    "NANA Regional Corporation pilot",
+    "Bering Straits Native Corporation aviation",
+    "Calista Corporation aviation pilot",
+    "Doyon Limited aviation",
+    "Chugach Alaska Corporation aviation",
+    "Arctic Slope Regional Corporation ASRC aviation",
+    "Sealaska aviation",
+    "Ahtna Incorporated aviation",
+    "Koniag aviation",
+    "Bristol Bay Native Corporation aviation",
+    "CIRI aviation Alaska",
+    "Aleut Corporation aviation",
+    "Olgoonik aviation pilot",
+    "Ukpeagvik UIC aviation",
+    "Tanana Chiefs Conference pilot",
+    "Maniilaq Association pilot"
+  ],
+  "pinned": [
+    {
+      "title": "Pilot SIC PC-12 - Remote Alaska Rotational",
+      "employer": "NANA Regional Corporation",
+      "location": "Fairbanks / Kotzebue, AK",
+      "url": "https://www.allaviationjob.com/jobs/288251016-pilot-sic-pc-12-remote-alaska-rotational",
+      "note": "Two weeks on, two weeks off. Point of hire Anchorage or Fairbanks. Employer hidden on BizJetJobs; this link shows the full posting.",
+      "rotation": "two weeks on two weeks off"
+    }
   ]
 }
