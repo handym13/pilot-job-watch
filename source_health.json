@@ -1,99 +1,99 @@
 {
  "https://ameriflight.com/careers/": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
   "hits": 0,
   "last_hit": null,
   "name": "Ameriflight"
  },
  "https://bizjetjobs.com/jobs": {
-  "checks": 24,
+  "checks": 25,
   "errors": 0,
   "hits": 0,
   "last_hit": null,
   "name": "BizJetJobs board"
  },
  "https://bizjetjobs.com/low-time-pilots": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
-  "hits": 26,
+  "hits": 27,
   "last_hit": "2026-07-29",
   "name": "BizJetJobs low time"
  },
  "https://careers.alaskaair.com/company/horizon-air/job-category/pilots/jobs/": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
   "hits": 0,
   "last_hit": null,
   "name": "Horizon Air"
  },
  "https://flighthired.com/job/": {
-  "checks": 26,
+  "checks": 27,
   "errors": 2,
   "hits": 0,
   "last_hit": null,
   "name": "FlightHired"
  },
  "https://www.airlinepilotforums.com/part-91-low-time/": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
-  "hits": 286,
+  "hits": 297,
   "last_hit": "2026-07-29",
   "name": "APC Part 91 and Low Time"
  },
  "https://www.allaviationjob.com/jobs": {
-  "checks": 24,
+  "checks": 25,
   "errors": 0,
-  "hits": 116,
+  "hits": 120,
   "last_hit": "2026-07-29",
   "name": "All Aviation Jobs"
  },
  "https://www.flygrant.com/careers": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
   "hits": 0,
   "last_hit": null,
   "name": "Grant Aviation"
  },
  "https://www.flyravn.com/careers/": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
   "hits": 0,
   "last_hit": null,
   "name": "Ravn Alaska"
  },
  "https://www.glassdoor.com/Jobs/Southern-Airways-Express-Jobs-E1907708.htm": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
   "hits": 40,
   "last_hit": "2026-07-29",
   "name": "Southern / Mokulele"
  },
  "https://www.kamakaair.com/careers": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
   "hits": 0,
   "last_hit": null,
   "name": "Kamaka Air"
  },
  "https://www.kenmoreair.com/careers/": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
   "hits": 0,
   "last_hit": null,
   "name": "Kenmore Air"
  },
  "https://www.lowtimepilot.com/": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
-  "hits": 76,
+  "hits": 80,
   "last_hit": "2026-07-29",
   "name": "Low Time Pilot"
  },
  "https://www.roadto1500.com/p/community-database": {
-  "checks": 26,
+  "checks": 27,
   "errors": 0,
-  "hits": 26,
+  "hits": 27,
   "last_hit": "2026-07-29",
   "name": "Road to 1500 database"
  }
